@@ -9,11 +9,11 @@ import (
 )
 
 type Server struct {
-	UnimplementedParamReaderServer
+	UnimplementedAuthEngineServer
 }
 
 
-func (s *Server) GetParam(ctx context.Context, in *Request) (*Response, error) {
+func (s *Server) Auth(ctx context.Context, in *Request) (*Response, error) {
 	logger := log.New(os.Stdout, in.RequestId +" ", log.LstdFlags|log.Lmsgprefix)
 	logger.Println("Received auth check:"+in.AuthToken)
 	ok := true

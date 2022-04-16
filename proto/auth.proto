@@ -12,6 +12,6 @@ message Response {
   string orgid =1;  
 }
 
-service ParamReader {
+service AuthEngine {
   rpc auth(Request) returns (Response) {}
 }

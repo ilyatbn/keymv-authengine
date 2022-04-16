@@ -14,86 +14,86 @@ import (
 // Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
-// ParamReaderClient is the client API for ParamReader service.
+// AuthEngineClient is the client API for AuthEngine service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type ParamReaderClient interface {
+type AuthEngineClient interface {
 	Auth(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error)
 }
 
-type paramReaderClient struct {
+type authEngineClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewParamReaderClient(cc grpc.ClientConnInterface) ParamReaderClient {
-	return &paramReaderClient{cc}
+func NewAuthEngineClient(cc grpc.ClientConnInterface) AuthEngineClient {
+	return &authEngineClient{cc}
 }
 
-func (c *paramReaderClient) Auth(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error) {
+func (c *authEngineClient) Auth(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error) {
 	out := new(Response)
-	err := c.cc.Invoke(ctx, "/auth.ParamReader/auth", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/auth.AuthEngine/auth", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// ParamReaderServer is the server API for ParamReader service.
-// All implementations must embed UnimplementedParamReaderServer
+// AuthEngineServer is the server API for AuthEngine service.
+// All implementations must embed UnimplementedAuthEngineServer
 // for forward compatibility
-type ParamReaderServer interface {
+type AuthEngineServer interface {
 	Auth(context.Context, *Request) (*Response, error)
-	mustEmbedUnimplementedParamReaderServer()
+	mustEmbedUnimplementedAuthEngineServer()
 }
 
-// UnimplementedParamReaderServer must be embedded to have forward compatible implementations.
-type UnimplementedParamReaderServer struct {
+// UnimplementedAuthEngineServer must be embedded to have forward compatible implementations.
+type UnimplementedAuthEngineServer struct {
 }
 
-func (UnimplementedParamReaderServer) Auth(context.Context, *Request) (*Response, error) {
+func (UnimplementedAuthEngineServer) Auth(context.Context, *Request) (*Response, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Auth not implemented")
 }
-func (UnimplementedParamReaderServer) mustEmbedUnimplementedParamReaderServer() {}
+func (UnimplementedAuthEngineServer) mustEmbedUnimplementedAuthEngineServer() {}
 
-// UnsafeParamReaderServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to ParamReaderServer will
+// UnsafeAuthEngineServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AuthEngineServer will
 // result in compilation errors.
-type UnsafeParamReaderServer interface {
-	mustEmbedUnimplementedParamReaderServer()
+type UnsafeAuthEngineServer interface {
+	mustEmbedUnimplementedAuthEngineServer()
 }
 
-func RegisterParamReaderServer(s grpc.ServiceRegistrar, srv ParamReaderServer) {
-	s.RegisterService(&ParamReader_ServiceDesc, srv)
+func RegisterAuthEngineServer(s grpc.ServiceRegistrar, srv AuthEngineServer) {
+	s.RegisterService(&AuthEngine_ServiceDesc, srv)
 }
 
-func _ParamReader_Auth_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _AuthEngine_Auth_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Request)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ParamReaderServer).Auth(ctx, in)
+		return srv.(AuthEngineServer).Auth(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/auth.ParamReader/auth",
+		FullMethod: "/auth.AuthEngine/auth",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ParamReaderServer).Auth(ctx, req.(*Request))
+		return srv.(AuthEngineServer).Auth(ctx, req.(*Request))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// ParamReader_ServiceDesc is the grpc.ServiceDesc for ParamReader service.
+// AuthEngine_ServiceDesc is the grpc.ServiceDesc for AuthEngine service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var ParamReader_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "auth.ParamReader",
-	HandlerType: (*ParamReaderServer)(nil),
+var AuthEngine_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "auth.AuthEngine",
+	HandlerType: (*AuthEngineServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "auth",
-			Handler:    _ParamReader_Auth_Handler,
+			Handler:    _AuthEngine_Auth_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
