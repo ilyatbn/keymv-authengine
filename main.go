@@ -3,8 +3,9 @@ package main
 import (
 	"log"
 	"net"
-	"keymv.io/authEngine/proto"
 	"google.golang.org/grpc"
+	"github.com/ilyatbn/keymv-authengine/auth"
+	authengine "github.com/ilyatbn/keymv-proto/authengine"
 )
 
 func main() {
@@ -15,7 +16,7 @@ func main() {
 	}
 	paramServer := auth.Server{}
 	grpcServer := grpc.NewServer()
-	auth.RegisterParamReaderServer(grpcServer, &paramServer)
+	authengine.RegisterAuthEngineServer(grpcServer, &paramServer)
 	log.Printf("authEngine Listening on 0.0.0.0"+listenPort)
 
 	if err := grpcServer.Serve(lis); err != nil {
