@@ -10,6 +10,7 @@ require (
 )
 
 require (
+	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/ilyatbn/keymv-proto v0.0.0-20220421093344-551e433bd7af // indirect
@@ -17,6 +18,5 @@ require (
 	golang.org/x/text v0.3.0 // indirect
 	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013 // indirect
 )
-replace (
-	github.com/ilyatbn/keymv-proto v0.0.0-20220421093344-551e433bd7af => "../keymv-proto"
-)
+
+replace github.com/ilyatbn/keymv-proto v0.0.0-20220421093344-551e433bd7af => ../keymv-proto
