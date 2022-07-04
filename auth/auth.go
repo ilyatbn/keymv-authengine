@@ -155,8 +155,8 @@ func (s *Server) Validate(ctx context.Context, in *auth.ValidationDataReq) (*aut
 	logger.Printf("received token validation request")
 	session, ok := sessions[in.Token]
 	if !ok {
-		logger.Println("user not found in cache")
-		return &auth.ValidationDataRes{Valid: "false", ShouldRefresh: true}, nil
+		logger.Println("invalid jwt token provided")
+		return &auth.ValidationDataRes{Valid: "false"}, nil
 	}
 	key, err := jwt.ParseRSAPublicKeyFromPEM(session.PublicKey)
 	if err != nil {
