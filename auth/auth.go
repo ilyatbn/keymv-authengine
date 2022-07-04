@@ -1,20 +1,20 @@
 package auth
 
 import (
-	"errors"
-	"log"
-	"os"
-	"fmt"
-	"time"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+	"time"
 	"github.com/golang-jwt/jwt"
 	"github.com/ilyatbn/keymv-proto/authengine"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"crypto/x509"
-	"encoding/pem"
 )
 type Server struct {
 	auth.UnimplementedAuthEngineServer
@@ -52,7 +52,6 @@ func newRSAKey() (*rsa.PrivateKey, error) {
 	return privateKey, nil
 }
 
-
 func GenerateJWT(username string) (string, []byte, error) {
 	expirationTime := time.Now().Add(jwtExpirationMin * time.Minute)
 	claims := &Claims{
@@ -87,32 +86,43 @@ func GenerateJWT(username string) (string, []byte, error) {
 
 func AuthUser(credentials Credentials) (string, error) {
 	//scylla representation. temp.
-	var users = map[string]string{
+	var usersPasswords = map[string]string{
 		"user1": "hashedpassword",
 		"user2": "hashedpassword2",
+	}
+	var userOrgs = map[string]int{
+		"user1": 1,
+		"user2": 199,
+	}
+	var userRoles = map[string]string{
+		"user1": "Admin",
+		"user2": "ReadAllValues",
+	}
+
+
+	//check scylla
+	userPassword, ok := usersPasswords[credentials.Username]
+	if !ok {
+		return "", errors.New("user not found in database")
+	} else if userPassword != credentials.Password {
+		return "", errors.New("incorrect credentials")
 	}
 	//check redis
 	session, ok := sessions[credentials.Username]
 	if ok {
-		log.Println("user found in cache.")
-		return session.token,nil
+		log.Println("user token already found in cache. reauthenticating.")
 	}	
-	
-	userPassword, ok := users[credentials.Username]
-	//check in redis if this token already exists, return the details
-	//if not, request the db microservice.
-	
-	if !ok {
-		return "", errors.New("user not found in database")
-	} else if userPassword != credentials.Password {
-		return "", errors.New("incorrect password")
-	}
+
 	jwt,key, err := GenerateJWT(credentials.Username)
 	if err != nil {
 		return "", err
 	}
-	session = sessionInfo{key,1,"Admin",jwt}
-	//store session in reddis.for now we'll do it in a map of sessions
+	//get more user data from scylla
+	userOrg := userOrgs[credentials.Username]
+	userRole := userRoles[credentials.Username]
+
+	session = sessionInfo{key,userOrg,userRole,jwt}
+	//store session in redis.for now we'll do it in a map of sessions
 	//figure out a way to less this make crappy so that we dont have to store every session twice. it's dumb.
 	sessions[jwt] = session
 	sessions[credentials.Username] = session
@@ -140,22 +150,20 @@ func (s *Server) Auth(ctx context.Context, in *auth.Credentials) (*auth.Response
 
 
 func (s *Server) Validate(ctx context.Context, in *auth.ValidationDataReq) (*auth.ValidationDataRes, error) {
-	//decode jwt. get info from redis. if something there, respond with data, if not, assume authentication expired/unauthenticated.
-	logger := log.New(os.Stdout, "AuthEngine" +" ", log.LstdFlags|log.Lmsgprefix)
-	//do a special validation that this is coming from inside the system or make this only available internally somehow. THIS IS CRITICAL
-	//TWO SERVERS?
-	session, ok := sessions[in.Userinfo]
+	//sessions=redis
+	logger := log.New(os.Stdout, in.RequestId +" ", log.LstdFlags|log.Lmsgprefix)
+	logger.Printf("received token validation request")
+	session, ok := sessions[in.Token]
 	if !ok {
 		logger.Println("user not found in cache")
-		return &auth.ValidationDataRes{Valid: "false"}, nil
+		return &auth.ValidationDataRes{Valid: "false", ShouldRefresh: true}, nil
 	}
 	key, err := jwt.ParseRSAPublicKeyFromPEM(session.PublicKey)
 	if err != nil {
 		logger.Println("error parsing publicKey from cache:", err)
 		return nil, status.Errorf(codes.Internal,"Error with parsing publicKey")
 	}
-
-	//i dont like this shit since its not my code. do something to checkthat the JWT is Valid
+	//Validation. Mostly not my code.
 	tok, err := jwt.Parse(session.token, func(jwtToken *jwt.Token) (interface{}, error) {
 		if _, ok := jwtToken.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected method: %s", jwtToken.Header["alg"])
@@ -163,13 +171,27 @@ func (s *Server) Validate(ctx context.Context, in *auth.ValidationDataReq) (*aut
 		return key, nil
 	})
 	if err != nil {
+		logger.Printf("there was an error while parsing jwt")
 		return nil, fmt.Errorf("validate: %w", err)
 	}
 	claims, ok := tok.Claims.(jwt.MapClaims)
 	if !ok || !tok.Valid {
-		return nil, fmt.Errorf("validate: invalid")
+		logger.Printf("claims token is invalid")
+		return nil, fmt.Errorf("validation: invalid")
 	}
-	_ = claims
-	///////////////////////////////////////////////////////////////////////////////
-	return &auth.ValidationDataRes{Valid: "true",OrgId: "1",Role: "Admin"}, nil
+	//
+	
+    var exp time.Time
+	expClaim,_ := claims["exp"].(float64)
+	exp = time.Unix(int64(expClaim), 0)
+	un,_ := claims["Username"].(string)
+	userData:= sessions[un]
+	
+	et := time.Until(exp)
+	//client will do this check every 10 minutes and if the response contains ShouldRefresh, it will do another Auth
+	if et.Minutes() < 60 {
+		logger.Printf("token will expire in %v. sending refresh code", et.Minutes())
+		return &auth.ValidationDataRes{Valid: "true",OrgId: int32(userData.orgId) ,Role: userData.role,ShouldRefresh: true}, nil
+	}
+	return &auth.ValidationDataRes{Valid: "true",OrgId: int32(userData.orgId) ,Role: userData.role}, nil
 }
