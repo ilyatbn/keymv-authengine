@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"crypto/sha256"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	grpc_client "github.com/ilyatbn/keymv-authengine/client"
 )
 type Server struct {
 	auth.UnimplementedAuthEngineServer
@@ -26,16 +28,18 @@ type Credentials struct {
 
 type sessionInfo struct {
 	PublicKey []byte
-	orgId int
+	orgId string
 	role string
 	token string
-
 }
 
 type Claims struct {
 	Username string
 	jwt.StandardClaims
 }
+
+//change that to get from someplace else
+var databaseEngineService string = "localhost:49010"
 
 
 var jwtExpirationMin time.Duration = 1440
@@ -52,7 +56,7 @@ func newRSAKey() (*rsa.PrivateKey, error) {
 	return privateKey, nil
 }
 
-func GenerateJWT(username string) (string, []byte, error) {
+func generateJWT(username string) (string, []byte, error) {
 	expirationTime := time.Now().Add(jwtExpirationMin * time.Minute)
 	claims := &Claims{
 		Username: username,
@@ -84,42 +88,29 @@ func GenerateJWT(username string) (string, []byte, error) {
 	return tokenString, encodedPk, nil
 }
 
-func AuthUser(credentials Credentials) (string, error) {
-	//scylla representation. temp.
-	var usersPasswords = map[string]string{
-		"user1": "hashedpassword",
-		"user2": "hashedpassword2",
-	}
-	var userOrgs = map[string]int{
-		"user1": 1,
-		"user2": 199,
-	}
-	var userRoles = map[string]string{
-		"user1": "Admin",
-		"user2": "ReadAllValues",
-	}
-
-
-	//check scylla
-	userPassword, ok := usersPasswords[credentials.Username]
-	if !ok {
-		return "", errors.New("user not found in database")
-	} else if userPassword != credentials.Password {
-		return "", errors.New("incorrect credentials")
-	}
-	//check redis
+func authUser(credentials Credentials, refId string) (string, error) {
 	session, ok := sessions[credentials.Username]
 	if ok {
 		log.Println("user token already found in cache. reauthenticating.")
 	}	
 
-	jwt,key, err := GenerateJWT(credentials.Username)
+	//check scylla
+	userData, err := grpc_client.GetUserData(databaseEngineService, credentials.Username, refId)
+	hashedPass := sha256.Sum256([]byte(credentials.Password))
+
+	if err!=nil {
+		return "", errors.New("user not found in database")
+	} else if userData.Password != fmt.Sprintf("%x", hashedPass){
+		return "", errors.New("incorrect credentials")
+	}
+
+	jwt,key, err := generateJWT(credentials.Username)
 	if err != nil {
 		return "", err
 	}
 	//get more user data from scylla
-	userOrg := userOrgs[credentials.Username]
-	userRole := userRoles[credentials.Username]
+	userOrg := userData.Org
+	userRole := userData.Role
 
 	session = sessionInfo{key,userOrg,userRole,jwt}
 	//store session in redis.for now we'll do it in a map of sessions
@@ -138,7 +129,7 @@ func (s *Server) Auth(ctx context.Context, in *auth.Credentials) (*auth.Response
 		Username: in.Username,
 		Password: in.Password,
 	}
-	jwt, err := AuthUser(creds)
+	jwt, err := authUser(creds,logger.Prefix())
 	
 	if err!=nil{
 		logger.Println(err)
@@ -191,7 +182,7 @@ func (s *Server) Validate(ctx context.Context, in *auth.ValidationDataReq) (*aut
 	//client will do this check every 10 minutes and if the response contains ShouldRefresh, it will do another Auth
 	if et.Minutes() < 60 {
 		logger.Printf("token will expire in %v. sending refresh code", et.Minutes())
-		return &auth.ValidationDataRes{Valid: "true",OrgId: int32(userData.orgId) ,Role: userData.role,ShouldRefresh: true}, nil
+		return &auth.ValidationDataRes{Valid: "true",OrgId: userData.orgId ,Role: userData.role, ShouldRefresh: true}, nil
 	}
-	return &auth.ValidationDataRes{Valid: "true",OrgId: int32(userData.orgId) ,Role: userData.role}, nil
+	return &auth.ValidationDataRes{Valid: "true",OrgId: userData.orgId ,Role: userData.role}, nil
 }
